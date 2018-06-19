@@ -670,6 +670,8 @@
 	
 		var highlight = function(node) {
 			var skip = 0;
+			// Wrap matching part of text node with highlighting <span>, e.g.
+			// Soccer  ->  <span class="highlight">Soc</span>cer  for regex = /soc/i
 			if (node.nodeType === 3) {
 				var pos = node.data.search(regex);
 				if (pos >= 0 && node.data.length > 0) {
@@ -683,7 +685,10 @@
 					middlebit.parentNode.replaceChild(spannode, middlebit);
 					skip = 1;
 				}
-			} else if (node.nodeType === 1 && node.childNodes && !/(script|style)/i.test(node.tagName)) {
+			} 
+			// Recurse element node, looking for child text nodes to highlight, unless element 
+			// is childless, <script>, <style>, or already highlighted: <span class="hightlight">
+			else if (node.nodeType === 1 && node.childNodes && !/(script|style)/i.test(node.tagName) && ( node.className !== 'highlight' || node.tagName !== 'SPAN' )) {
 				for (var i = 0; i < node.childNodes.length; ++i) {
 					i += highlight(node.childNodes[i]);
 				}
@@ -1006,16 +1011,20 @@
 			return 0;
 		}
 	
-		var $test = $('<test>').css({
-			position: 'absolute',
-			top: -99999,
-			left: -99999,
-			width: 'auto',
-			padding: 0,
-			whiteSpace: 'pre'
-		}).text(str).appendTo('body');
+		if (!Selectize.$testInput) {
+			Selectize.$testInput = $('<span />').css({
+				position: 'absolute',
+				top: -99999,
+				left: -99999,
+				width: 'auto',
+				padding: 0,
+				whiteSpace: 'pre'
+			}).appendTo('body');
+		}
 	
-		transferStyles($parent, $test, [
+		Selectize.$testInput.text(str);
+	
+		transferStyles($parent, Selectize.$testInput, [
 			'letterSpacing',
 			'fontSize',
 			'fontFamily',
@@ -1023,10 +1032,7 @@
 			'textTransform'
 		]);
 	
-		var width = $test.width();
-		$test.remove();
-	
-		return width;
+		return Selectize.$testInput.width();
 	};
 	
 	/**
@@ -1054,9 +1060,10 @@
 			if (e.type && e.type.toLowerCase() === 'keydown') {
 				keyCode = e.keyCode;
 				printable = (
-					(keyCode >= 97 && keyCode <= 122) || // a-z
-					(keyCode >= 65 && keyCode <= 90)  || // A-Z
 					(keyCode >= 48 && keyCode <= 57)  || // 0-9
+					(keyCode >= 65 && keyCode <= 90)   || // a-z
+					(keyCode >= 96 && keyCode <= 111)  || // numpad 0-9, numeric operators
+					(keyCode >= 186 && keyCode <= 222) || // semicolon, equal, comma, dash, etc.
 					keyCode === 32 // space
 				);
 	
@@ -1139,6 +1146,7 @@
 	
 			eventNS          : '.selectize' + (++Selectize.count),
 			highlightedValue : null,
+			isBlurring       : false,
 			isOpen           : false,
 			isDisabled       : false,
 			isRequired       : $input.is('[required]'),
@@ -1298,6 +1306,7 @@
 			if ($input.attr('autocapitalize')) {
 				$control_input.attr('autocapitalize', $input.attr('autocapitalize'));
 			}
+			$control_input[0].type = $input[0].type;
 	
 			self.$wrapper          = $wrapper;
 			self.$control          = $control;
@@ -1305,6 +1314,7 @@
 			self.$dropdown         = $dropdown;
 			self.$dropdown_content = $dropdown_content;
 	
+			$dropdown.on('mouseenter mousedown click', '[data-disabled]>[data-selectable]', function(e) { e.stopImmediatePropagation(); });
 			$dropdown.on('mouseenter', '[data-selectable]', function() { return self.onOptionHover.apply(self, arguments); });
 			$dropdown.on('mousedown click', '[data-selectable]', function() { return self.onOptionSelect.apply(self, arguments); });
 			watchChildEvent($control, 'mousedown', '*:not(input)', function() { return self.onItemSelect.apply(self, arguments); });
@@ -1322,7 +1332,7 @@
 				keypress  : function() { return self.onKeyPress.apply(self, arguments); },
 				resize    : function() { self.positionDropdown.apply(self, []); },
 				blur      : function() { return self.onBlur.apply(self, arguments); },
-				focus     : function() { self.ignoreBlur = false; return self.onFocus.apply(self, arguments); },
+				focus     : function() { self.ignoreBlur = false; self.ignoreFocus = false; self.trigger('focus'); return self.onFocus.apply(self, arguments); },
 				paste     : function() { return self.onPaste.apply(self, arguments); }
 			});
 	
@@ -1480,7 +1490,9 @@
 	
 			// necessary for mobile webkit devices (manual focus triggering
 			// is ignored unless invoked within a click event)
-			if (!self.isFocused) {
+	    // also necessary to reopen a dropdown that has been closed by
+	    // closeAfterSelect
+			if (!self.isFocused || !self.isOpen) {
 				self.focus();
 				e.preventDefault();
 			}
@@ -1604,7 +1616,7 @@
 				case KEY_ESC:
 					if (self.isOpen) {
 						e.preventDefault();
-						e.stopPropagation();
+						// e.stopPropagation();
 						self.close();
 					}
 					return;
@@ -1612,7 +1624,8 @@
 					if (!e.ctrlKey || e.altKey) break;
 				case KEY_DOWN:
 					if (!self.isOpen && self.hasOptions) {
-						self.open();
+						self.refreshOptions(true);
+						// self.open();
 					} else if (self.$activeOption) {
 						self.ignoreHover = true;
 						var $next = self.getAdjacentOption(self.$activeOption, 1);
@@ -1641,16 +1654,20 @@
 					return;
 				case KEY_RIGHT:
 					self.advanceSelection(1, e);
+					if (self.isOpen && self.$activeOption) {
+						self.onOptionSelect({currentTarget: self.$activeOption});
+						e.preventDefault();
+					}
 					return;
 				case KEY_TAB:
 					if (self.settings.selectOnTab && self.isOpen && self.$activeOption) {
 						self.onOptionSelect({currentTarget: self.$activeOption});
-	
+						e.preventDefault();
 						// Default behaviour is to jump to the next field, we only want this
 						// if the current field doesn't accept any more entries
-						if (!self.isFull()) {
-							e.preventDefault();
-						}
+						// if (!self.isFull()) {
+						// 	e.preventDefault();
+						// }
 					}
 					if (self.settings.create && self.createItem()) {
 						e.preventDefault();
@@ -1676,13 +1693,22 @@
 		 */
 		onKeyUp: function(e) {
 			var self = this;
-	
 			if (self.isLocked) return e && e.preventDefault();
-			var value = self.$control_input.val() || '';
+			if (!(['Backspace', 'Tab'].includes(e.key)) && e.key.length > 1) return;
+			
+			var value = self.$control_input.val();
+			// var lengthCheck = self.lastValue && (self.lastValue.length > value.length && value.length === 0);
+			// console.log('its a keyup', lengthCheck, value, value.length, self.lastValue, self.lastValue.length);
+			// // var lengthCheck = (self.lastValue !== value) && (self.lastValue.length > value.length) && value.length === 0;
+			// if (lengthCheck) {
+			// 	console.log('keyup close');
+			// 	self.close();
+			// }
+
 			if (self.lastValue !== value) {
 				self.lastValue = value;
 				self.onSearchChange(value);
-				self.refreshOptions();
+				self.refreshOptions(true);
 				self.trigger('type', value);
 			}
 		},
@@ -1722,12 +1748,13 @@
 				return false;
 			}
 	
-			if (self.ignoreFocus) return;
+			// if (self.ignoreFocus) return;
 			self.isFocused = true;
 			if (self.settings.preload === 'focus') self.onSearchChange('');
 	
-			if (!wasFocused) self.trigger('focus');
-	
+			// if (!wasFocused) { 
+			// 	self.trigger('focus');
+			// }
 			if (!self.$activeItems.length) {
 				self.showInput();
 				self.setActiveItem(null);
@@ -1748,14 +1775,16 @@
 			if (!self.isFocused) return;
 			self.isFocused = false;
 	
-			if (self.ignoreFocus) {
-				return;
-			} else if (!self.ignoreBlur && document.activeElement === self.$dropdown_content[0]) {
-				// necessary to prevent IE closing the dropdown when the scrollbar is clicked
-				self.ignoreBlur = true;
-				self.onFocus(e);
-				return;
-			}
+			// if (self.ignoreFocus) {
+			// 	console.log('ignore focus?');
+			// 	return;
+			// } else if (!self.ignoreBlur && document.activeElement === self.$dropdown_content[0]) {
+			// 	console.log('focus it again i guess?');
+			// 	// necessary to prevent IE closing the dropdown when the scrollbar is clicked
+			// 	self.ignoreBlur = true;
+			// 	self.onFocus(e);
+			// 	return;
+			// }
 	
 			var deactivate = function() {
 				self.close();
@@ -1768,10 +1797,12 @@
 				// IE11 bug: element still marked as active
 				dest && dest.focus && dest.focus();
 	
+				self.isBlurring = false;
 				self.ignoreFocus = false;
 				self.trigger('blur');
 			};
 	
+			self.isBlurring = true;
 			self.ignoreFocus = true;
 			if (self.settings.create && self.settings.createOnBlur) {
 				self.createItem(null, false, deactivate);
@@ -1804,7 +1835,7 @@
 	
 			if (e.preventDefault) {
 				e.preventDefault();
-				e.stopPropagation();
+				// e.stopPropagation();
 			}
 	
 			$target = $(e.currentTarget);
@@ -2063,10 +2094,10 @@
 	
 			self.ignoreFocus = true;
 			self.$control_input[0].focus();
-			window.setTimeout(function() {
-				self.ignoreFocus = false;
-				self.onFocus();
-			}, 0);
+			// window.setTimeout(function() {
+			// 	self.ignoreFocus = false;
+			// 	self.onFocus();
+			// }, 0);
 		},
 	
 		/**
@@ -2109,7 +2140,8 @@
 			return {
 				fields      : settings.searchField,
 				conjunction : settings.searchConjunction,
-				sort        : sort
+				sort        : sort,
+				nesting     : settings.nesting
 			};
 		},
 	
@@ -2243,10 +2275,12 @@
 			$dropdown_content.html(html);
 	
 			// highlight matching terms inline
-			if (self.settings.highlight && results.query.length && results.tokens.length) {
+			if (self.settings.highlight) {
 				$dropdown_content.removeHighlight();
-				for (i = 0, n = results.tokens.length; i < n; i++) {
-					highlight($dropdown_content, results.tokens[i].regex);
+				if (results.query.length && results.tokens.length) {
+					for (i = 0, n = results.tokens.length; i < n; i++) {
+						highlight($dropdown_content, results.tokens[i].regex);
+					}
 				}
 			}
 	
@@ -2267,7 +2301,7 @@
 			// activate
 			self.hasOptions = results.items.length > 0 || has_create_option;
 			if (self.hasOptions) {
-				if (results.items.length > 0) {
+				if (results.items.length > 0 && !$create) {
 					$active_before = active_before && self.getOption(active_before);
 					if ($active_before && $active_before.length) {
 						$active = $active_before;
@@ -2481,10 +2515,15 @@
 			self.loadedSearches = {};
 			self.userOptions = {};
 			self.renderCache = {};
-			self.options = self.sifter.items = {};
+			var options = self.options;
+			$.each(self.options, function(key, value) {
+				if(self.items.indexOf(key) == -1) {
+					delete options[key];
+				}
+			});
+			self.options = self.sifter.items = options;
 			self.lastQuery = null;
 			self.trigger('option_clear');
-			self.clear();
 		},
 	
 		/**
@@ -2554,11 +2593,23 @@
 		 * @param {boolean} silent
 		 */
 		addItems: function(values, silent) {
+			this.buffer = document.createDocumentFragment();
+	
+			var childNodes = this.$control[0].childNodes;
+			for (var i = 0; i < childNodes.length; i++) {
+				this.buffer.appendChild(childNodes[i]);
+			}
+	
 			var items = $.isArray(values) ? values : [values];
 			for (var i = 0, n = items.length; i < n; i++) {
 				this.isPending = (i < n - 1);
 				this.addItem(items[i], silent);
 			}
+	
+			var control = this.$control[0];
+			control.insertBefore(this.buffer, control.firstChild);
+	
+			this.buffer = null;
 		},
 	
 		/**
@@ -2579,8 +2630,10 @@
 				value = hash_key(value);
 	
 				if (self.items.indexOf(value) !== -1) {
-					if (inputMode === 'single') self.close();
-					return;
+					if (inputMode === 'single') {
+						self.close();
+					}
+					// return;
 				}
 	
 				if (!self.options.hasOwnProperty(value)) return;
@@ -2611,13 +2664,16 @@
 					// hide the menu if the maximum number of items have been selected or no options are left
 					if (!$options.length || self.isFull()) {
 						self.close();
-					} else {
+					} else if (!self.isPending) {
 						self.positionDropdown();
 					}
 	
 					self.updatePlaceholder();
 					self.trigger('item_add', value, $item);
-					self.updateOriginalInput({silent: silent});
+	
+					if (!self.isPending) {
+						self.updateOriginalInput({silent: silent});
+					}
 				}
 			});
 		},
@@ -2852,7 +2908,6 @@
 		 */
 		open: function() {
 			var self = this;
-	
 			if (self.isLocked || self.isOpen || (self.settings.mode === 'multi' && self.isFull())) return;
 			self.focus();
 			self.isOpen = true;
@@ -2869,10 +2924,15 @@
 		close: function() {
 			var self = this;
 			var trigger = self.isOpen;
-	
 			if (self.settings.mode === 'single' && self.items.length) {
 				self.hideInput();
-				self.$control_input.blur(); // close keyboard on iOS
+	
+				// Do not trigger blur while inside a blur event,
+				// this fixes some weird tabbing behavior in FF and IE.
+				// See #1164
+				if (!self.isBlurring) {
+					self.$control_input.blur(); // close keyboard on iOS
+				}
 			}
 	
 			self.isOpen = false;
@@ -2893,7 +2953,7 @@
 			offset.top += $control.outerHeight(true);
 	
 			this.$dropdown.css({
-				width : $control.outerWidth(),
+				width : $control[0].getBoundingClientRect().width,
 				top   : offset.top,
 				left  : offset.left
 			});
@@ -2929,11 +2989,15 @@
 		 */
 		insertAtCaret: function($el) {
 			var caret = Math.min(this.caretPos, this.items.length);
+			var el = $el[0];
+			var target = this.buffer || this.$control[0];
+	
 			if (caret === 0) {
-				this.$control.prepend($el);
+				target.insertBefore(el, target.firstChild);
 			} else {
-				$(this.$control[0].childNodes[caret]).before($el);
+				target.insertBefore(el, target.childNodes[caret]);
 			}
+	
 			this.setCaret(caret + 1);
 		},
 	
@@ -3169,6 +3233,11 @@
 			self.$control_input.removeData('grow');
 			self.$input.removeData('selectize');
 	
+			if (--Selectize.count == 0 && Selectize.$testInput) {
+				Selectize.$testInput.remove();
+				Selectize.$testInput = undefined;
+			}
+	
 			$(window).off(eventNS);
 			$(document).off(eventNS);
 			$(document.body).off(eventNS);
@@ -3211,11 +3280,16 @@
 	
 			// add mandatory attributes
 			if (templateName === 'option' || templateName === 'option_create') {
-				html.attr('data-selectable', '');
+				if (!data[self.settings.disabledField]) {
+					html.attr('data-selectable', '');
+				}
 			}
 			else if (templateName === 'optgroup') {
 				id = data[self.settings.optgroupValueField] || '';
 				html.attr('data-group', id);
+				if(data[self.settings.disabledField]) {
+					html.attr('data-disabled', '');
+				}
 			}
 			if (templateName === 'option' || templateName === 'item') {
 				html.attr('data-value', value || '');
@@ -3297,6 +3371,7 @@
 		optgroupField: 'optgroup',
 		valueField: 'value',
 		labelField: 'text',
+		disabledField: 'disabled',
 		optgroupLabelField: 'label',
 		optgroupValueField: 'value',
 		lockOptgroupOrder: false,
@@ -3353,6 +3428,7 @@
 		var attr_data            = settings.dataAttr;
 		var field_label          = settings.labelField;
 		var field_value          = settings.valueField;
+		var field_disabled       = settings.disabledField;
 		var field_optgroup       = settings.optgroupField;
 		var field_optgroup_label = settings.optgroupLabelField;
 		var field_optgroup_value = settings.optgroupValueField;
@@ -3433,6 +3509,7 @@
 				var option             = readData($option) || {};
 				option[field_label]    = option[field_label] || $option.text();
 				option[field_value]    = option[field_value] || value;
+				option[field_disabled] = option[field_disabled] || $option.prop('disabled');
 				option[field_optgroup] = option[field_optgroup] || group;
 	
 				optionsMap[value] = option;
@@ -3453,6 +3530,7 @@
 					optgroup = readData($optgroup) || {};
 					optgroup[field_optgroup_label] = id;
 					optgroup[field_optgroup_value] = id;
+					optgroup[field_disabled] = $optgroup.prop('disabled');
 					settings_element.optgroups.push(optgroup);
 				}
 	
@@ -3710,7 +3788,8 @@
 				 * @return {string}
 				 */
 				var append = function(html_container, html_element) {
-					return html_container + html_element;
+					return $('<span>').append(html_container)
+						.append(html_element);
 				};
 	
 				thisRef.setup = (function() {
