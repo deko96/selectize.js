@@ -1644,7 +1644,7 @@
 					e.preventDefault();
 					return;
 				case KEY_RETURN:
-					if (self.isOpen && self.$activeOption) {
+					if ((self.isOpen && self.$activeOption) || self.settings.disableDropdown) {
 						self.onOptionSelect({currentTarget: self.$activeOption});
 						e.preventDefault();
 					}
@@ -1654,13 +1654,13 @@
 					return;
 				case KEY_RIGHT:
 					self.advanceSelection(1, e);
-					if (self.isOpen && self.$activeOption) {
+					if ((self.isOpen && self.$activeOption) || self.settings.disableDropdown) {
 						self.onOptionSelect({currentTarget: self.$activeOption});
 						e.preventDefault();
 					}
 					return;
 				case KEY_TAB:
-					if (self.settings.selectOnTab && self.isOpen && self.$activeOption) {
+					if (self.settings.selectOnTab && ((self.isOpen && self.$activeOption) || self.settings.disableDropdown)) {
 						self.onOptionSelect({currentTarget: self.$activeOption});
 						e.preventDefault();
 						// Default behaviour is to jump to the next field, we only want this
@@ -1741,7 +1741,7 @@
 		onFocus: function(e) {
 			var self = this;
 			var wasFocused = self.isFocused;
-	
+
 			if (self.isDisabled) {
 				self.blur();
 				e && e.preventDefault();
@@ -1758,7 +1758,7 @@
 			if (!self.$activeItems.length) {
 				self.showInput();
 				self.setActiveItem(null);
-				self.refreshOptions(!!self.settings.openOnFocus);
+				if (!self.settings.disableDropdown) self.refreshOptions(!!self.settings.openOnFocus);
 			}
 	
 			self.refreshState();
@@ -2207,7 +2207,7 @@
 			if (typeof triggerDropdown === 'undefined') {
 				triggerDropdown = true;
 			}
-	
+
 			var self              = this;
 			var query             = $.trim(self.$control_input.val());
 			var results           = self.search(query);
@@ -2435,7 +2435,7 @@
 	
 			value     = hash_key(value);
 			value_new = hash_key(data[self.settings.valueField]);
-	
+
 			// sanity checks
 			if (value === null) return;
 			if (!self.options.hasOwnProperty(value)) return;
@@ -2863,7 +2863,6 @@
 		updateOriginalInput: function(opts) {
 			var i, n, options, label, self = this;
 			opts = opts || {};
-	
 			if (self.tagType === TAG_SELECT) {
 				options = [];
 				for (i = 0, n = self.items.length; i < n; i++) {
@@ -2908,7 +2907,7 @@
 		 */
 		open: function() {
 			var self = this;
-			if (self.isLocked || self.isOpen || (self.settings.mode === 'multi' && self.isFull())) return;
+			if (self.isLocked || self.isOpen || (self.settings.mode === 'multi' && self.isFull()) || self.settings.disableDropdown) return;
 			self.focus();
 			self.isOpen = true;
 			self.refreshState();
