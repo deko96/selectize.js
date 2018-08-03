@@ -1407,7 +1407,7 @@
 	
 			$input.data('selectize', self);
 			$input.addClass('selectized');
-			self.trigger('initialize');
+			self.trigger('initialize', self);
 	
 			// preload options
 			if (settings.preload === true) {
@@ -1636,7 +1636,9 @@
 				case KEY_P:
 					if (!e.ctrlKey || e.altKey) break;
 				case KEY_UP:
-					if (self.$activeOption) {
+					if (self.getOptionIndex(self.$activeOption) === 0) {
+						self.close();
+					} else if (self.$activeOption) {
 						self.ignoreHover = true;
 						var $prev = self.getAdjacentOption(self.$activeOption, -1);
 						if ($prev.length) self.setActiveOption($prev, true, true);
@@ -1644,19 +1646,38 @@
 					e.preventDefault();
 					return;
 				case KEY_RETURN:
-					if ((self.isOpen && self.$activeOption) || self.settings.disableDropdown) {
+					var value = self.$control_input.val();
+
+					if (self.isOpen && self.$activeOption) {
 						self.onOptionSelect({currentTarget: self.$activeOption});
 						e.preventDefault();
+					} else {
+						if (self.settings.mode === 'single')
+							self.setValue(value);
 					}
+					// if ((self.isOpen && self.$activeOption) || self.settings.disableDropdown) {
+					// 	self.onOptionSelect({currentTarget: self.$activeOption});
+					// 	e.preventDefault();
+					// }
 					return;
 				case KEY_LEFT:
 					self.advanceSelection(-1, e);
 					return;
 				case KEY_RIGHT:
 					self.advanceSelection(1, e);
-					if ((self.isOpen && self.$activeOption) || self.settings.disableDropdown) {
+					var caret = self.getCaretPosition();
+					var value = self.$control_input.val();
+
+					if (self.isOpen && self.$activeOption) {
 						self.onOptionSelect({currentTarget: self.$activeOption});
 						e.preventDefault();
+					} else {
+						if (caret[0] === caret[1] && caret[0] === value.length) {
+							if (self.settings.mode === 'single')
+								self.setValue(value);
+						} else {
+							e.stopPropagation();
+						}
 					}
 					return;
 				case KEY_TAB:
@@ -1709,6 +1730,9 @@
 				self.lastValue = value;
 				self.onSearchChange(value);
 				self.refreshOptions(true);
+				if (!value || !value.length) {
+					self.close(true);
+				}
 				self.trigger('type', value);
 			}
 		},
@@ -1755,6 +1779,14 @@
 			// if (!wasFocused) { 
 			// 	self.trigger('focus');
 			// }
+			let value = self.getValue();
+			if (value && self.settings.mode === 'single') {
+				self.clear(true);
+				self.setTextboxValue(value);
+				self.$control_input[0].select();
+				self.close();
+			}
+
 			if (!self.$activeItems.length) {
 				self.showInput();
 				self.setActiveItem(null);
@@ -1804,9 +1836,10 @@
 	
 			self.isBlurring = true;
 			self.ignoreFocus = true;
-			if (self.settings.create && self.settings.createOnBlur) {
+			if (self.settings.createOnBlur && self.settings.create) {
 				self.createItem(null, false, deactivate);
 			} else {
+				self.addItem(self.$control_input.val(), true);
 				deactivate();
 			}
 		},
@@ -1846,7 +1879,7 @@
 					}
 				});
 			} else {
-				value = $target.attr('data-value');
+				value = self.settings.disableDropdown ? self.$control_input.val() : $target.attr('data-value');
 				if (typeof value !== 'undefined') {
 					self.lastQuery = null;
 					self.setTextboxValue('');
@@ -1912,10 +1945,22 @@
 			var changed = $input.val() !== value;
 			if (changed) {
 				$input.val(value).triggerHandler('update');
+				self.focus();
 				this.lastValue = value;
 			}
 		},
-	
+
+		/**
+		 * Gets the current caret position within the input
+		 * @returns {mixed}
+		 */
+		getCaretPosition: function() {
+			var self = this;
+			var $input = self.$control_input[0];
+			var start = $input.selectionStart;
+			var end = $input.selectionEnd;
+			return [start, end];
+		},
 		/**
 		 * Returns the value of the control. If multiple items
 		 * can be selected (e.g. <select multiple>), this returns
@@ -1930,6 +1975,10 @@
 			} else {
 				return this.items.join(this.settings.delimiter);
 			}
+		},
+
+		getInputValue: function() {
+			return this.$control_input.val();
 		},
 	
 		/**
@@ -2093,10 +2142,12 @@
 			if (self.isDisabled) return;
 	
 			self.ignoreFocus = true;
-			self.$control_input[0].focus();
+			window.setTimeout(function() {
+				self.$control_input[0].focus();
+			}, 0);
 			// window.setTimeout(function() {
-			// 	self.ignoreFocus = false;
-			// 	self.onFocus();
+				// self.ignoreFocus = false;
+				// self.onFocus();
 			// }, 0);
 		},
 	
@@ -2552,6 +2603,13 @@
 			return index >= 0 && index < $options.length ? $options.eq(index) : $();
 		},
 	
+		getOptionIndex: function($option) {
+			var $options = this.$dropdown.find('[data-selectable]');
+			var index    = $options.index($option);
+
+			return index;
+		},
+
 		/**
 		 * Finds the first element with a "data-value" attribute
 		 * that matches the given value.
@@ -2730,17 +2788,13 @@
 		 * @param {function} [callback]
 		 * @return {boolean}
 		 */
-		createItem: function(input, triggerDropdown) {
+		createItem: function(input, triggerDropdown = true, silent = false) {
 			var self  = this;
 			var caret = self.caretPos;
 			input = input || $.trim(self.$control_input.val() || '');
 	
 			var callback = arguments[arguments.length - 1];
 			if (typeof callback !== 'function') callback = function() {};
-	
-			if (typeof triggerDropdown !== 'boolean') {
-				triggerDropdown = true;
-			}
 	
 			if (!self.canCreate(input)) {
 				callback();
@@ -2766,7 +2820,7 @@
 				self.setTextboxValue('');
 				self.addOption(data);
 				self.setCaret(caret);
-				self.addItem(value);
+				self.addItem(value, silent);
 				self.refreshOptions(triggerDropdown && self.settings.mode !== 'single');
 				callback(data);
 			});
