@@ -1453,6 +1453,7 @@
 			var key, fn, callbacks = {
 				'initialize'      : 'onInitialize',
 				'change'          : 'onChange',
+				'keypress'		  : 'onKeyPress',
 				'item_add'        : 'onItemAdd',
 				'item_remove'     : 'onItemRemove',
 				'clear'           : 'onClear',
@@ -1598,7 +1599,8 @@
 		onKeyDown: function(e) {
 			var isInput = e.target === this.$control_input[0];
 			var self = this;
-	
+			self.trigger('keypress', e);
+
 			if (self.isLocked) {
 				if (e.keyCode !== KEY_TAB) {
 					e.preventDefault();
@@ -1652,8 +1654,24 @@
 						self.onOptionSelect({currentTarget: self.$activeOption});
 						e.preventDefault();
 					} else {
-						if (self.settings.mode === 'single')
-							self.setValue(value);
+						var disableDropdown = typeof self.settings.disableDropdown === 'boolean' ? self.settings.disableDropdown : false;
+
+						if (self.settings.mode === 'single') {
+							if (self.settings.create) {
+								self.createItem(null, false, false);
+								e.preventDefault();
+							} else {
+								value = hash_key(value);
+								if(self.options.hasOwnProperty(value)) {
+									self.addItem(value);
+									// self.onOptionSelect({ currentTarget: self.$activeOption });
+									e.preventDefault();
+								} else {
+									self.setTextboxValue('');
+								}
+							}
+							// self.addItem(value);
+						}
 					}
 					// if ((self.isOpen && self.$activeOption) || self.settings.disableDropdown) {
 					// 	self.onOptionSelect({currentTarget: self.$activeOption});
@@ -1673,17 +1691,44 @@
 						e.preventDefault();
 					} else {
 						if (caret[0] === caret[1] && caret[0] === value.length) {
-							if (self.settings.mode === 'single')
-								self.setValue(value);
-						} else {
-							e.stopPropagation();
+							var disableDropdown = typeof self.settings.disableDropdown === 'boolean' ? self.settings.disableDropdown : false;
+
+							if (self.settings.mode === 'single') {
+								if (self.settings.create) {
+									self.createItem(null, false, false);
+									e.preventDefault();
+								} else {
+									value = hash_key(value);
+									if(self.options.hasOwnProperty(value)) {
+										self.addItem(value);
+										// self.onOptionSelect({ currentTarget: self.$activeOption });
+										e.preventDefault();
+									} else {
+										self.setTextboxValue('');
+									}
+								}
+								// self.addItem(value);
+							}
 						}
 					}
+
+					// if (self.isOpen && self.$activeOption) {
+					// 	self.onOptionSelect({currentTarget: self.$activeOption});
+					// 	e.preventDefault();
+					// } else {
+					// 	if (caret[0] === caret[1] && caret[0] === value.length) {
+					// 		if (self.settings.mode === 'single')
+					// 			self.setValue(value);
+					// 	} else {
+					// 		e.stopPropagation();
+					// 	}
+					// }
 					return;
 				case KEY_TAB:
-					if (self.settings.selectOnTab && ((self.isOpen && self.$activeOption) || self.settings.disableDropdown)) {
+
+					if (self.settings.selectOnTab && self.isOpen && self.$activeOption) {
 						self.onOptionSelect({currentTarget: self.$activeOption});
-						e.preventDefault();
+
 						// Default behaviour is to jump to the next field, we only want this
 						// if the current field doesn't accept any more entries
 						// if (!self.isFull()) {
@@ -1691,8 +1736,72 @@
 						// }
 					}
 					if (self.settings.create && self.createItem()) {
-						e.preventDefault();
+						// e.preventDefault();
 					}
+
+					// if (self.settings.selectOnTab && self.isOpen && self.$activeOption) {
+					// 	self.onOptionSelect({currentTarget: self.$activeOption});
+					// 	// Default behaviour is to jump to the next field, we only want this
+					// 	// if the current field doesn't accept any more entries
+					// 	// if (!self.isFull()) {
+					// 	// 	e.preventDefault();
+					// 	// }
+					// }
+					// if (self.settings.create) {
+					// 	self.createItem();
+					// 	// e.preventDefault();
+					// }
+
+
+
+					// if (!self.settings.selectOnTab) return;
+					// var disableDropdown = typeof self.settings.disableDropdown === 'boolean' ? self.settings.disableDropdown : false;
+					// var value = self.$control_input.val();
+
+					// if (disableDropdown) {
+					// 	if (self.settings.create) {
+					// 		self.createItem(null, false, false);
+					// 	} else {
+					// 		self.setTextboxValue('');
+					// 	}
+					// } else {
+					// 	if (self.isOpen && self.$activeOption) {
+					// 		self.onOptionSelect({currentTarget: self.$activeOption});
+					// 	} else {
+					// 		if (self.settings.mode === 'single' && value)
+					// 			self.setValue(value);
+					// 	}
+					// }
+					// e.preventDefault();
+					// if (self.settings.selectOnTab) {
+					// 	var value = self.getInputValue();
+					// 	if (self.isOpen && self.$activeOption) {
+					// 		self.onOptionSelect({ currentTarget: self.$activeOption });
+					// 	} else {
+					// 		if (self.settings.create) {
+					// 			self.createItem();
+					// 		} else {
+					// 			if (self.options.hasOwnProperty(value)) {
+					// 				self.addItem(value);
+					// 			}
+					// 		}
+					// 	}
+					// }
+					// if (self.settings.selectOnTab && ((self.isOpen && self.$activeOption) || disableDropdown)) {
+					// 	self.onOptionSelect({currentTarget: self.$activeOption});
+					// 	e.preventDefault();
+					// }
+						// Default behaviour is to jump to the next field, we only want this
+						// if the current field doesn't accept any more entries
+						// if (!self.isFull()) {
+						// 	e.preventDefault();
+						// }
+					// } else {
+					// 	console.log('else inside this KEY_TAB?!', self.settings.selectOnTab);
+					// }
+					// if (self.settings.create && self.createItem()) {
+					// 	e.preventDefault();
+					// }
 					return;
 				case KEY_BACKSPACE:
 				case KEY_DELETE:
@@ -1700,10 +1809,10 @@
 					return;
 			}
 	
-			if ((self.isFull() || self.isInputHidden) && !(IS_MAC ? e.metaKey : e.ctrlKey)) {
-				e.preventDefault();
-				return;
-			}
+			// if ((self.isFull() || self.isInputHidden) && !(IS_MAC ? e.metaKey : e.ctrlKey)) {
+			// 	e.preventDefault();
+			// 	return;
+			// }
 		},
 	
 		/**
@@ -1866,10 +1975,10 @@
 		onOptionSelect: function(e) {
 			var value, $target, $option, self = this;
 	
-			if (e.preventDefault) {
-				e.preventDefault();
-				// e.stopPropagation();
-			}
+			// if (e.preventDefault) {
+			// 	e.preventDefault();
+			// 	// e.stopPropagation();
+			// }
 	
 			$target = $(e.currentTarget);
 			if ($target.hasClass('create')) {
@@ -1945,7 +2054,7 @@
 			var changed = $input.val() !== value;
 			if (changed) {
 				$input.val(value).triggerHandler('update');
-				self.focus();
+				// self.focus();
 				this.lastValue = value;
 			}
 		},
@@ -2140,11 +2249,12 @@
 		focus: function() {
 			var self = this;
 			if (self.isDisabled) return;
-	
 			self.ignoreFocus = true;
-			window.setTimeout(function() {
-				self.$control_input[0].focus();
-			}, 0);
+			// window.setTimeout(function() {
+			// 	if(self.isFocused) return;
+			// 	// self.$control_input[0].focus();
+			// 	// self.$control_input[0].focus();
+			// }, 0);
 			// window.setTimeout(function() {
 				// self.ignoreFocus = false;
 				// self.onFocus();
@@ -2678,6 +2788,7 @@
 		 * @param {boolean} silent
 		 */
 		addItem: function(value, silent) {
+			// console.log('addItem', value, silent);
 			var events = silent ? [] : ['change'];
 	
 			debounce_events(this, events, function() {
@@ -2686,7 +2797,6 @@
 				var inputMode = self.settings.mode;
 				var i, active, value_next, wasFull;
 				value = hash_key(value);
-	
 				if (self.items.indexOf(value) !== -1) {
 					if (inputMode === 'single') {
 						self.close();
@@ -2697,7 +2807,6 @@
 				if (!self.options.hasOwnProperty(value)) return;
 				if (inputMode === 'single') self.clear(silent);
 				if (inputMode === 'multi' && self.isFull()) return;
-	
 				$item = $(self.render('item', self.options[value]));
 				wasFull = self.isFull();
 				self.items.splice(self.caretPos, 0, value);
@@ -2705,7 +2814,6 @@
 				if (!self.isPending || (!wasFull && self.isFull())) {
 					self.refreshState();
 				}
-	
 				if (self.isSetup) {
 					$options = self.$dropdown_content.find('[data-selectable]');
 	
@@ -2800,7 +2908,6 @@
 				callback();
 				return false;
 			}
-	
 			self.lock();
 	
 			var setup = (typeof self.settings.create === 'function') ? this.settings.create : function(input) {
@@ -2809,7 +2916,6 @@
 				data[self.settings.valueField] = input;
 				return data;
 			};
-	
 			var create = once(function(data) {
 				self.unlock();
 	
@@ -2817,11 +2923,11 @@
 				var value = hash_key(data[self.settings.valueField]);
 				if (typeof value !== 'string') return callback();
 	
-				self.setTextboxValue('');
+				// self.setTextboxValue('');
 				self.addOption(data);
-				self.setCaret(caret);
+				// self.setCaret(caret);
 				self.addItem(value, silent);
-				self.refreshOptions(triggerDropdown && self.settings.mode !== 'single');
+				// self.refreshOptions(triggerDropdown && self.settings.mode !== 'single');
 				callback(data);
 			});
 	
@@ -2829,7 +2935,6 @@
 			if (typeof output !== 'undefined') {
 				create(output);
 			}
-	
 			return true;
 		},
 	
@@ -2984,7 +3089,7 @@
 				// this fixes some weird tabbing behavior in FF and IE.
 				// See #1164
 				if (!self.isBlurring) {
-					self.$control_input.blur(); // close keyboard on iOS
+					// self.$control_input.blur(); // close keyboard on iOS
 				}
 			}
 	
