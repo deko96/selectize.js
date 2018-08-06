@@ -1488,13 +1488,12 @@
 		 */
 		onClick: function(e) {
 			var self = this;
-	
 			// necessary for mobile webkit devices (manual focus triggering
 			// is ignored unless invoked within a click event)
 	    // also necessary to reopen a dropdown that has been closed by
 	    // closeAfterSelect
 			if (!self.isFocused || !self.isOpen) {
-				self.focus();
+				self.focus(true);
 				e.preventDefault();
 			}
 		},
@@ -2246,10 +2245,13 @@
 		/**
 		 * Gives the control focus.
 		 */
-		focus: function() {
+		focus: function(force = false) {
 			var self = this;
 			if (self.isDisabled) return;
 			self.ignoreFocus = true;
+			if (force) {
+				self.$control_input[0].focus();
+			}
 			// window.setTimeout(function() {
 			// 	if(self.isFocused) return;
 			// 	// self.$control_input[0].focus();
