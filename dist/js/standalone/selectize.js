@@ -1823,7 +1823,7 @@
 		onKeyUp: function(e) {
 			var self = this;
 			if (self.isLocked) return e && e.preventDefault();
-			if (!(['Backspace', 'Tab'].includes(e.key)) && e.key.length > 1) return;
+			if (!(['Backspace', 'Tab', 'Delete'].includes(e.key)) && e.key.length > 1) return;
 			
 			var value = self.$control_input.val();
 			// var lengthCheck = self.lastValue && (self.lastValue.length > value.length && value.length === 0);
