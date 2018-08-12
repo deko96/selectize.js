@@ -1833,7 +1833,6 @@
 			// 	console.log('keyup close');
 			// 	self.close();
 			// }
-
 			if (self.lastValue !== value) {
 				self.lastValue = value;
 				self.onSearchChange(value);
@@ -2803,7 +2802,7 @@
 					if (inputMode === 'single') {
 						self.close();
 					}
-					// return;
+					return;
 				}
 	
 				if (!self.options.hasOwnProperty(value)) return;
@@ -3180,7 +3179,6 @@
 	
 			// determine items that will be removed
 			values = [];
-	
 			if (self.$activeItems.length) {
 				$tail = self.$control.children('.active:' + (direction > 0 ? 'last' : 'first'));
 				caret = self.$control.children(':not(input)').index($tail);
@@ -3200,9 +3198,12 @@
 					values.push(self.items[self.caretPos]);
 				}
 			}
+
+			console.log(values, 'these are the values.');
 	
 			// allow the callback to abort
 			if (!values.length || (typeof self.settings.onDelete === 'function' && self.settings.onDelete.apply(self, [values]) === false)) {
+				self.clear(true);
 				return false;
 			}
 	
