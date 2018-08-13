@@ -1944,7 +1944,8 @@
 			self.isBlurring = true;
 			self.ignoreFocus = true;
 			if (self.settings.createOnBlur && self.settings.create) {
-				self.createItem(null, false, deactivate);
+				self.createItem(null, false, false, deactivate);
+				// self.createItem(null, false, deactivate);
 			} else {
 				self.addItem(self.$control_input.val(), true);
 				deactivate();
@@ -3199,7 +3200,6 @@
 				}
 			}
 
-			console.log(values, 'these are the values.');
 	
 			// allow the callback to abort
 			if (!values.length || (typeof self.settings.onDelete === 'function' && self.settings.onDelete.apply(self, [values]) === false)) {
