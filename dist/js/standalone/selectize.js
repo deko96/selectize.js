@@ -1947,7 +1947,7 @@
 				self.createItem(null, false, false, deactivate);
 				// self.createItem(null, false, deactivate);
 			} else {
-				self.addItem(self.$control_input.val(), true);
+				self.addItem(self.$control_input.val(), false);
 				deactivate();
 			}
 		},
